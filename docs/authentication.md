@@ -93,7 +93,7 @@ This path ends in the same consent flow as DCR, so a metadata-document client ne
 3. `redirect_uri` must match a registered URI exactly. A mismatch is `invalid_request`, and no redirect happens on failure.
 4. `code_challenge` must be 43 to 128 characters from `[A-Za-z0-9-._~]`, and `code_challenge_method` must be `S256`.
 5. If the client already has an active grant, a code is issued immediately and the consent prompt is skipped.
-6. Otherwise the app shows a consent dialog and waits up to 5 minutes.
+6. Otherwise the app shows a consent dialog and waits up to 5 minutes. The dialog shows the client name and, when the server can resolve it, the local process path. A browser navigation gets a waiting page immediately; the page polls `/authorize/status` and follows the redirect once the user decides.
 7. Denial or timeout redirects with `error=access_denied`.
 8. On approval the grant is created and the code is issued.
 
@@ -153,9 +153,19 @@ Every refresh rotates the pair. Refresh tokens carry a `family_id` shared by eve
 
 If a refresh token is presented after it was already rotated while the grant is still active, the server treats it as a replay: the whole grant and all of its access and refresh tokens are revoked. Otherwise the old token is marked rotated and a new pair is issued under the same family.
 
+## Accounts
+
+Clients, grants, and tokens live in an app-wide store, so a connection belongs to the computer rather than to one SearchPoint account. When the user signs out and signs in as another account, the same client and token keep working, and tool calls act for whichever account is signed in. While signed out, every request still gets `401`; the connection resumes after sign-in without a new authorization.
+
 ## Using a token
 
 Send `Authorization: Bearer <access_token>` on every `POST /mcp`. The server requires an unexpired, unrevoked token whose grant is still active, and updates `last_used_at` for the client and the grant.
+
+## Tool permissions
+
+Each connected client has its own tool permissions, set by the user in **Settings > MCP > Connected Apps > the app > Tools**. A newly connected client starts with only `search_file` and `get_file` enabled.
+
+Disabled tools stay in `tools/list`, with `(currently disabled by the user)` appended to their description. Calling one returns a normal tool result with `isError: true` and a message asking the user to enable it. The token stays valid; this is authorization, not an authentication failure.
 
 ## Revocation
 
