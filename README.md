@@ -57,8 +57,9 @@ implicit.
 Protocol: negotiate one of 2025-06-18 (latest), 2025-03-26, 2024-11-05 in
 `initialize`.
 
-Then call the tools listed in docs/tools.md. Store the tokens, refresh
-them, and handle JSON-RPC errors.
+Then call the tools listed in docs/tools.md. `search_file` also accepts
+the Advanced search groups: `all` (AND), `any` (OR), and `none` (NOT).
+Store the tokens, refresh them, and handle JSON-RPC errors.
 ```
 
 A working client needs to:
@@ -74,11 +75,11 @@ A working client needs to:
 
 ## Tools
 
-The desktop server exposes 17 tools.
+The desktop server exposes 17 tools. The web client exposes only `search_file` and `get_file`; every other tool is desktop only.
 
 | Tool | Purpose |
 | --- | --- |
-| `search_file` | Full-text search over the user's documents |
+| `search_file` | Full-text search, with the Advanced search groups (`all`/`any`/`none`) |
 | `get_file` | Full metadata for one document |
 | `add_local_source` | Register and index a local folder |
 | `remove_local_source` | Unregister a folder and delete its index |
@@ -118,8 +119,9 @@ A tool failure comes back as a normal JSON-RPC result with `isError: true` and a
 
 ## Good to know
 
-- **One user at a time.** The server acts for whoever is signed in to the desktop app. Never send `owner_email`; the owner is implicit.
+- **One user at a time.** The server acts for whoever is signed in to the desktop app. Never send `owner_email`; the owner is implicit. Connections belong to the computer, so signing in as another account keeps the connection and changes whose data tool calls act on.
 - **The user must approve you.** The first `/authorize` for a new client shows a consent dialog in the app. An unknown or inactive client cannot call tools.
+- **New apps start read-only.** A newly connected client can call only `search_file` and `get_file`. The user enables the rest per app in **Settings > MCP > Connected Apps > Tools**. A disabled tool still appears in `tools/list` with a note, and calling it returns `isError: true`.
 - **Keep it local.** Redirect URIs must be loopback (`http://127.0.0.1:<port>/...` or `localhost`) with no fragment or userinfo. `https://www.cursor.com/agents/mcp/oauth/callback` is the only non-loopback exception, reserved for Cursor.
 - **No static secrets.** Dynamic client registration issues a public `client_id` and no secret. Tokens are opaque bearer credentials.
 - **The server can disappear.** If the app quits or the user signs out, connections fail. Signing out makes every OAuth endpoint answer `401` without stopping the listener.

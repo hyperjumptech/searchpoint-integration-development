@@ -16,10 +16,12 @@ All tools are called with JSON-RPC `tools/call`:
 
 `tools/list` returns the catalog with each tool's JSON Schema. Every tool rejects unknown parameters, so never send a key that is not documented here.
 
+The web client exposes only `search_file` and `get_file`. Every other tool is desktop only. On desktop, a newly connected client also starts with only those two tools enabled; the user enables the rest per app in **Settings > MCP > Connected Apps > Tools**.
+
 ## General rules
 
 - The owner is implicit: the server acts for the signed-in SearchPoint user. **Never send `owner_email`.**
-- Start minimal. `{ "search": "q3" }` is a valid and often the best first call. Add filters only when the user asks for them.
+- Start minimal. `{ "search": "q3" }` is a valid and often the best first call. Add filters only when the user asks for them. When the user describes terms to include and exclude, use `all`, `any`, and `none` instead of `search`.
 - Do not guess filter values. Omit `source`, `kind`, `author`, or dates the user did not mention.
 - Never send `type: ["*"]` or `source: "unknown"`. Omit the parameter to mean "all".
 - IDs come from `search_file` (`value[]._source.id`), `list_favorites` (`fileId`), or `list_files_by_tag`. Pass them to `get_file`, the favorite tools, and the tag tools.
@@ -29,20 +31,25 @@ All tools are called with JSON-RPC `tools/call`:
 
 ### `search_file`
 
-Full-text search over the user's documents.
+Full-text search over the user's documents, with the app's Advanced search groups.
 
 | Parameter | Type | Notes |
 | --- | --- | --- |
-| `search` | string, min 1 | **Required.** Full-text query. |
+| `search` | string, min 1 | Required unless `all`, `any`, or `none` is given. Send either `search` or the groups, not both. |
+| `all` | string[] | Every term must appear (AND). Use instead of `search` for the Advanced search groups. |
+| `any` | string[] | At least one term must appear (OR). |
+| `none` | string[] | No term may appear (NOT). |
 | `type` | string[] | File extensions without the dot, e.g. `["pdf"]` or `["docx","xlsx"]`. Omit for all types. |
 | `kind` | `"video"`, `"document"`, `"image"` | Only if the user names a kind. |
 | `author` | string | Name or email, e.g. `"satriyo"` or `"satriyo@hyperjump.tech"`. |
 | `updated_after` | string | Lower bound on `updated_at`. ISO 8601 (`2023-01-01T00:00:00Z`) or `YYYY-MM-DD`. |
 | `updated_before` | string | Upper bound on `updated_at`. Same formats. |
 | `source` | enum | `"shared folder"`, `"apple notes"`, `"onedrive"`, `"onedrive-business"`, `"onedrive-personal"`, `"sharepoint"`, `"teams"`, `"unknown"`. Never use `"unknown"`. |
-| `mode` | `"broad"` (default), `"exact"` | `broad` is typo-tolerant. `exact` for precise phrases, IDs, or codes. |
+| `mode` | `"broad"` (default), `"exact"` | `broad` is typo-tolerant. `exact` for precise phrases, IDs, or codes. Omit when using `all`/`any`/`none`. |
 | `page` | integer ≥ 1 | 1-based. |
 | `limit` | integer 1–50 | Default 10. |
+
+At least one of `search`, `all`, `any`, or `none` is required. Up to 32 terms and 1024 characters across the groups. Terms are literal text: a multi-word term is quoted, so all its words must appear in any order. The groups run on the SearchPoint backend and return an error when it is unreachable, rather than falling back to on-device search.
 
 Response: hits under `value[]._source`, pagination under `meta.pagination`. Use `_source.id` with `get_file`.
 
@@ -58,9 +65,17 @@ Response: hits under `value[]._source`, pagination under `meta.pagination`. Use 
 { "search": "INV-2026-00123", "mode": "exact" }
 ```
 
+```json
+{ "all": ["invoice"], "any": ["pdf", "docx"], "none": ["draft"] }
+```
+
+```json
+{ "all": ["laporan keuangan", "2025"], "none": ["template"], "type": ["xlsx"] }
+```
+
 Search strategy:
 
-1. Start with just `search`.
+1. Start with just `search`, or the groups when the user describes include/exclude terms.
 2. Too many results? Add the filters the user mentioned.
 3. Too few? Switch to `broad`, drop filters, or simplify the query.
 4. Present the top hits (name, source, updated date), then offer `get_file` on the best candidate.
@@ -280,7 +295,7 @@ Read-only SPARQL over the document facts, for what `search_document_facts` canno
 | `sparql` | string, min 1, max 10000 | **Required.** The query. |
 | `inferred` | boolean | `true` (default) includes facts the schema's rules infer, such as every NDA also being an Agreement. `false` gives only what was read from documents. |
 
-Supports `SELECT` and `ASK` with `OPTIONAL`, `FILTER`, `GRAPH`, `GROUP BY`, `ORDER BY`, `LIMIT`, and `OFFSET`. `UNION`, `MINUS`, `NOT EXISTS`, `VALUES`, `BIND`, subqueries, and property paths are not supported. The prefixes `sp:`, `spd:`, `spx:`, `rdf:`, `rdfs:`, `owl:`, `xsd:`, `skos:`, `sh:`, `prov:`, and `schema:` are predeclared.
+Supports SPARQL 1.1 `SELECT` and `ASK`, with `OPTIONAL`, `UNION`, `MINUS`, `FILTER`, `EXISTS`, `NOT EXISTS`, `BIND`, `VALUES`, `GRAPH`, subqueries, property paths, `GROUP BY` with aggregates, `ORDER BY`, `LIMIT`, and `OFFSET`. `CONSTRUCT`, `DESCRIBE`, `SERVICE`, and updates are refused. The prefixes `sp:`, `spd:`, `spx:`, `spr:`, `rdf:`, `rdfs:`, `owl:`, `xsd:`, `skos:`, `sh:`, `prov:`, `dcterms:`, and `org:` are predeclared.
 
 ```json
 { "sparql": "SELECT ?invoice WHERE { ?invoice a sp:Invoice } LIMIT 5" }
